@@ -1,0 +1,195 @@
+/*
+*Jogo criado por Eduardo Araújo
+*Designer de som: CH-07
+* note que nem tudo está bem programado aqui, este código foi facilitado para iniciantes e tem muitos comentários, alem do mais criei quando eu era um iniciante, desconcidere qualquer erro ou bug, ou caso queira corrigir fique avontade.
+*/
+
+//incluindo o som 3d. * adicionei 2 sound_pools porque o 3D só roda áudio mono, e alguns que estou usando são estério e fiquei com preguiça de converter.
+#include"includes/sound_pool3d.bgt";
+#include"sound_pool.bgt";
+int ix=7;//A variável que diz onde o helicóptero está. 
+int x=0; // a variável que mostra onde o jogador está.
+int rodada=0; //Variável para contar as chances até 10
+//Bools, eles dizem se algo é verdadeiro ou falso.
+bool pausado=false;
+bool inimigomorto=false;
+int pontos=0; //Pontuação do jogador, almenta de 1 em 1.
+timer t; //letra t atribuida ao tempo, para consiguir-mos controlar tempo que cada coisa acontece.
+sound_pool3d p; //letra p atribuida para os pools de som 3d.
+sound_pool p2; //p2 atribuido ao sound_pool normal
+reverb3d reverb;
+int motor; //o bufer que armazena o som, caso precise parar de tocar em algum momento.
+sound ambiente; //o som do ambiente que toca em loop.
+void falar(string msg){
+screen_reader_speak(NVDA, msg);
+}
+void main(){
+show_game_window("Nave de guerra");
+reverb.set_gain(0);
+reverb.set_reverb_density(0);
+reverb.set_decay_time(0);
+reverb.set_room_rolloff_factor(0);
+p.current_reverb=reverb.handle;
+//carregando o som na memória.
+ambiente.stream("ambiente1.wav");
+//agora tocando em loop.
+ambiente.play_looped();
+//tocando o som do helicóptero
+motor=p.play_2d("motor.wav",x,0,ix,0,true);
+while(true){
+if(key_pressed(KEY_ESCAPE)){
+screen_reader_speak(NVDA, "Saindo...");
+exit();
+}
+//atualiza o som do helicóptero sempre que o jogador se move na cordenada x
+p.update_listener_2d(x,0);
+teclas(); //chama uma função de teclas de controle, mover, pausar, etc.
+nave(); //chama a função nave, que é basicamente o motor que faz o helicóptero andar.
+wait(5); //o processador do computador espera 5 ms para fazer o loop do jogo, caso contrário as teclas não funcionam.
+}
+}
+
+void teclas(){
+//se pressionar espaço.
+if(key_pressed(KEY_SPACE)){
+if(pausado==false){
+falar("Pausado...");
+t.pause();
+para_som();
+p.play_stationary("pausado.wav", false);
+pausado=true;
+}
+else{
+t.resume();
+pausado=false;
+p.play_stationary("retomado.wav", false);
+falar("Retomado...");
+if(inimigomorto==false){
+motor=p.play_2d("motor.wav",x,0,ix,0,true);
+}
+}
+}
+//se apertar a tecla esquerda e segurar.
+if(key_down(KEY_LEFT)&&x>0){
+  if(pausado==false){
+//aguarda 100 ms para cada som de passo, senão o jogo fica muito rápido.
+wait(100);
+x--; //diminue 1 passo na cordenada x;
+pisando(); //chama a função para tocar som de pisadas.
+}
+}
+
+//segura a tecla direita
+if(key_down(KEY_RIGHT)&&x<20){
+//aguarda 100 ms também, para não ficar muito rápido.
+wait(100);
+x++; //almenta a cordenada x;
+pisando(); //som de pisada.
+}
+//apertando a tecla control esquerda.
+if(key_pressed(KEY_LCONTROL)){
+//se o inimigo estiver vivo atira.
+if(inimigomorto==false)atirar();
+}
+}
+void atirar(){
+//se cordenada x for igual a cordenada do helicóptero.
+if(x==ix){
+tiros(); //toca som de tiros.
+//logo depois para o som do helicóptero, porque não faz sentido deixar ele ligado depois de cair.
+para_som(); 
+//muda o estátos de vivo para morto e adiciona a pontuação.
+inimigomorto=true;
+pontos++;
+//aguarda um tempo para tocar o som de explosão.
+int tempo=random(400, 700);
+wait(tempo);
+p.play_stationary("derrubou.wav", false, false);
+}
+//e se o helicóptero não estiver na mesma cordenada do jogador.
+else{
+//só toca som de tiro.
+tiros();
+}
+}
+
+void nave(){
+//se o tempo utrapassar 6 segundos.
+if(t.elapsed>=6000){
+if(p.sound_is_playing(motor)){
+//pausa o som para não duplicar e ficar todo bagunçado.
+p.pause_sound(motor);
+}
+//verifica se o coiso ta vivo e também se a rodada está menor que 10.
+if((inimigomorto==false)&&rodada<=10){
+//se sim, o tempo reinicia.
+t.restart();
+rodada++;
+//sorteia um número para o helicóptero mudar de posição a cada rodada.
+ix=random(3, 18);
+p.max_distance=20;
+motor=p.play_2d("motor.wav",x,0,ix,0,true);
+}
+ if(inimigomorto==true){
+//se ele tava morto, aí ele volta a vida tocando aquele barulhinho 
+p.play_stationary("retomado.wav", false, false);
+inimigomorto=false;
+}
+if(rodada==10){
+//se as rodadas acabaram, aí chama a função do resultado.
+resultado();
+}
+}
+}
+void tiros(){
+//Basicamente sorteia um número para tocar um som de tiro diferente a cada hora.
+int j=random(1, 4);
+if(j==1){
+p.play_stationary("tiro1.wav", false);
+}
+if(j==2){
+p.play_stationary("tiro2.wav", false);
+}
+if(j==3){
+p.play_stationary("tiro3.wav", false);
+}
+if(j==4){
+p.play_stationary("tiro4.wav", false);
+}
+}
+void resultado(){
+falar("Prova concluida... Você atingiu a pontuação de"+pontos+" pontos.");
+//mata o helicóptero, para que ele não fique andando e bugando o jogo.
+inimigomorto=true;
+t.pause();
+para_som();
+ix=-5;
+if(pontos==0){
+falar("Nada legal, você precisa treinar mais.");
+p.play_stationary("alerta.wav", false);
+}
+if((pontos<=5)&&pontos>0){
+falar("Você está no caminho certo, continue treinando!");
+p.play_stationary("alerta.wav", false);
+}
+else if(pontos>=6){
+falar("Parabéns, você está cada vez melhor!");
+p.play_stationary("levelup.wav", false);
+}
+else if(pontos==10){
+falar("excelente! você conseguiu atingir a pontuação máxima.");
+p.play_stationary("levelup.wav", false);
+p.play_stationary("viva.wav", false);
+}
+}
+void para_som(){
+if(p.sound_is_playing(motor)){
+p.pause_sound(motor);
+}
+}
+void pisando(){
+//assim como os tiros, os sons de pés também são sorteados.
+//aqui são 10 sons de piso.
+int pisos=random(1, 10);
+p2.play_stationary("step"+pisos+".wav", false);
+}
